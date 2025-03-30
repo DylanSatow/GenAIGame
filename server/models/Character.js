@@ -1,5 +1,27 @@
 const mongoose = require('mongoose');
 
+const hitDice = {
+  barbarian: 12,
+  bard: 8,
+  cleric: 8,
+  druid: 8,
+  fighter: 10,
+  monk: 8,
+  paladin: 10,
+  ranger: 10,
+  rogue: 8,
+  sorcerer: 6,
+  warlock: 8,
+  wizard: 6
+};
+
+const armorAC = {
+  'No Armor': { base: 10, dexBonus: true, maxDex: null },
+  'Light Armor': { base: 11, dexBonus: true, maxDex: null },
+  'Medium Armor': { base: 14, dexBonus: true, maxDex: 2 },
+  'Heavy Armor': { base: 18, dexBonus: false, maxDex: null }
+};
+
 const characterSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -34,7 +56,7 @@ const characterSchema = new mongoose.Schema({
     type: {
       type: String,
       required: true,
-      enum: ['none', 'light', 'medium', 'heavy']
+      enum: Object.keys(armorAC)
     },
     name: {
       type: String,
@@ -49,69 +71,63 @@ const characterSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
 });
 
-// Calculate ability modifiers
-characterSchema.methods.getAbilityModifier = function(ability) {
-  return Math.floor((this.stats[ability] - 10) / 2);
-};
+// Calculate ability modifier
+function calculateModifier(score) {
+  return Math.floor((score - 10) / 2);
+}
 
-// Calculate proficiency bonus based on level
-characterSchema.methods.getProficiencyBonus = function() {
-  return 2 + Math.floor((this.level - 1) / 4);
-};
-
-// Calculate hit points based on class and constitution
+// Add methods to the schema
 characterSchema.methods.calculateHitPoints = function() {
-  const hitDice = {
-    'Fighter': 10,
-    'Wizard': 6,
-    'Rogue': 8,
-    'Cleric': 8,
-    'Ranger': 10,
-    'Paladin': 10,
-    'Barbarian': 12,
-    'Bard': 8,
-    'Druid': 8,
-    'Monk': 8,
-    'Warlock': 8
-  };
-
-  const conMod = this.getAbilityModifier('constitution');
-  const maxHP = hitDice[this.class] + conMod;
-  
+  const hitDie = hitDice[this.class.toLowerCase()];
+  const conMod = calculateModifier(this.stats.constitution);
+  const baseHP = hitDie + conMod;
   return {
-    maximum: maxHP,
-    current: maxHP
+    current: baseHP,
+    maximum: baseHP
   };
 };
 
-// Calculate armor class based on armor type and dexterity
 characterSchema.methods.calculateArmorClass = function() {
-  const dexMod = this.getAbilityModifier('dexterity');
+  const armor = armorAC[this.armor.type];
+  let ac = armor.base;
   
-  switch (this.armor.type) {
-    case 'none':
-      return 10 + dexMod;
-    case 'light':
-      return 11 + dexMod;
-    case 'medium':
-      return 14 + Math.min(dexMod, 2);
-    case 'heavy':
-      return 16; // Chain Mail
-    default:
-      return 10 + dexMod;
+  if (armor.dexBonus) {
+    const dexMod = calculateModifier(this.stats.dexterity);
+    if (armor.maxDex) {
+      ac += Math.min(dexMod, armor.maxDex);
+    } else {
+      ac += dexMod;
+    }
   }
+  
+  return ac;
 };
 
-// Pre-save hook to validate total ability scores
+// Pre-save hook to calculate HP and AC
 characterSchema.pre('save', function(next) {
-  const totalStats = Object.values(this.stats).reduce((sum, stat) => sum + stat, 0);
-  if (totalStats > 75) {
-    next(new Error('Total ability scores exceed allowed maximum for character creation'));
-  }
+  this.hitPoints = this.calculateHitPoints();
+  this.armorClass = this.calculateArmorClass();
+  this.updatedAt = new Date();
   next();
+});
+
+// Virtual for ability modifiers
+characterSchema.virtual('modifiers').get(function() {
+  return {
+    strength: calculateModifier(this.stats.strength),
+    dexterity: calculateModifier(this.stats.dexterity),
+    constitution: calculateModifier(this.stats.constitution),
+    intelligence: calculateModifier(this.stats.intelligence),
+    wisdom: calculateModifier(this.stats.wisdom),
+    charisma: calculateModifier(this.stats.charisma)
+  };
 });
 
 const Character = mongoose.model('Character', characterSchema);

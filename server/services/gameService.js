@@ -16,10 +16,13 @@ class GameService {
       throw new Error('Character not found');
     }
 
+    // Convert Mongoose document to plain object
+    const characterObj = character.toObject();
+
     const gameState = {
-      character,
+      character: characterObj,
       currentScene: null,
-      inventory: [],
+      inventory: characterObj.inventory || [],
       gameHistory: [],
       lastAction: null
     };
@@ -27,7 +30,7 @@ class GameService {
     this.activeGames.set(characterId, gameState);
     
     // Generate initial scene
-    const initialPrompt = this.generateInitialPrompt(character);
+    const initialPrompt = this.generateInitialPrompt(characterObj);
     const response = await this.getAIResponse(initialPrompt);
     
     gameState.currentScene = response;

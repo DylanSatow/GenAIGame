@@ -27,9 +27,9 @@ router.post('/action/:characterId', async (req, res) => {
 });
 
 // End game
-router.post('/end/:characterId', (req, res) => {
+router.post('/end/:characterId', async (req, res) => {
   try {
-    gameService.endGame(req.params.characterId);
+    await gameService.endGame(req.params.characterId);
     res.json({ message: 'Game ended successfully' });
   } catch (error) {
     res.status(400).json({ error: error.message });
